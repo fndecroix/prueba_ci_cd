@@ -87,6 +87,22 @@ Después las herramientas de test:
 npm install -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @testing-library/jest-dom @testing-library/user-event
 ```
 
+Al terminar, npm puede avisar que hay vulnerabilidades y sugerir
+`npm audit fix`. **No corras `npm audit fix --force`.** El `--force` permite
+cambiar versiones mayores de lo que haga falta para "arreglar" el reporte, y
+en este proyecto baja `eslint` a 8 y `eslint-config-next` a 14, que no son
+compatibles con tu `eslint.config.mjs`. El síntoma es
+`Package subpath './config' is not defined by "exports"` al correr el lint.
+Si te pasó, se vuelve con:
+
+```bash
+npm install -D eslint@^9 eslint-config-next@16.4.0
+```
+
+Verificá con `git diff package.json` que las únicas líneas que cambiaron
+sean las que esperás: los scripts nuevos y las dependencias que instalaste.
+Las vulnerabilidades las vemos en serio en el módulo 10.
+
 **Qué es cada uno:**
 - `vitest`: el runner.
 - `@vitejs/plugin-react`: le enseña a Vitest a compilar JSX de React.

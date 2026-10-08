@@ -261,12 +261,38 @@ variable que no se usa:
 const sinUsar = 42;
 ```
 
-Commit, push, mirá el run. Tiene que salir rojo. Entrá al step que falló y
-leé el error en el log: tiene que ser el mismo que te daría `npm run lint`
-localmente.
+Commit, push, mirá el run. **Va a salir verde.** Eso no es lo que querías,
+y es la lección de este paso.
 
-Después revertí el cambio (sacá la línea, o `git revert`), push, y
-comprobá que vuelve a verde.
+#### Errores vs warnings
+
+ESLint clasifica cada regla como `error` o `warning`. Solo los errores
+hacen que salga con código 1. Los warnings se imprimen y ESLint sale con 0,
+así que el step pasa y el job queda verde. La config de `eslint-config-next`
+marca `no-unused-vars` como warning, por eso el run no se enteró.
+
+Para CI esto es un problema: un warning que nadie mira es lo mismo que no
+tener la regla. Lo habitual es hacer que cualquier warning falle. Cambiá el
+script `lint` en `package.json` por esto:
+
+```json
+    "lint": "eslint --max-warnings 0",
+```
+
+- `--max-warnings 0` le dice a ESLint que tolere como máximo cero warnings.
+  Con uno solo ya sale con código 1.
+- Lo ponés en el script y no en el YAML para que local y CI corran exactamente
+  lo mismo.
+
+Probalo local con `npm run lint`: ahora tiene que terminar con `✖ 1 problem`
+y código de salida 1 (`echo $?` justo después te lo muestra).
+
+Commit con los dos cambios (`sinUsar` y el script), push, y mirá el run.
+Ahora sí tiene que salir rojo. Entrá al step que falló y leé el error en el
+log: tiene que ser el mismo que te dio `npm run lint` localmente.
+
+Después sacá la línea de `sinUsar` (dejá el `--max-warnings 0`, ese se
+queda), push, y comprobá que vuelve a verde.
 
 ## Consigna
 
