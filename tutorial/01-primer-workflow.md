@@ -104,22 +104,129 @@ Verificá con `gh repo view --web` que se abra el repo en el navegador.
 
 ### Paso 3: Escribir el workflow
 
-Creá el archivo `.github/workflows/ci.yml`. El nombre `ci.yml` es
-convención, no obligación; lo que importa es la carpeta.
+Creá el archivo `.github/workflows/ci.yml` (la carpeta también, si no
+existe). El nombre `ci.yml` es convención, no obligación; lo que importa es
+la carpeta.
 
-Esto es lo que tiene que hacer (consigna más abajo). Las piezas:
+El archivo se arma con las piezas de abajo, en ese orden. Andá copiando cada
+bloque y leé qué hace antes de pegar el siguiente. Ojo con la indentación:
+YAML usa espacios (dos por nivel acá), nunca tabs.
 
-- Se dispara en cada push a cualquier rama.
-- Un solo job, en `ubuntu-latest`.
-- Steps, en este orden:
-  1. Clonar el repo.
-  2. Instalar Node leyendo la versión de `.nvmrc`.
-  3. Instalar dependencias con `npm ci`.
-  4. Correr el lint.
+#### Pieza 1: nombre y disparador
 
-Documentación de referencia, si querés mirar la sintaxis exacta:
+```yaml
+name: CI
+
+on:
+  push:
+```
+
+- `name` es el texto que ves en la pestaña Actions y en el tilde al lado
+  del commit.
+- `on: push:` sin nada más abajo significa "cualquier push a cualquier
+  rama". Más adelante lo vamos a restringir (por ejemplo, solo `main`) y a
+  sumar `pull_request`; por ahora alcanza con esto.
+
+Si ya le pusiste `pull_request:` también, dejalo: no molesta y en el módulo
+3 lo vamos a necesitar. Hasta que abras un PR, no se dispara.
+
+#### Pieza 2: el job y su runner
+
+```yaml
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+```
+
+- `jobs` es un mapa: cada clave de abajo es un job. `ci` es el nombre que
+  elegiste vos; podría ser `lint`, `build`, lo que sea. Aparece como nombre
+  del job en la UI.
+- `runs-on: ubuntu-latest` pide una VM Ubuntu mantenida por GitHub. Hay
+  también `windows-latest` y `macos-latest`, pero Ubuntu es la más rápida y
+  barata.
+- `steps:` abre la lista de pasos. Todo lo que sigue va indentado seis
+  espacios (dentro de `steps`) y cada step empieza con `- `.
+
+#### Pieza 3: clonar el repo
+
+```yaml
+      - name: Checkout
+        uses: actions/checkout@v4
+```
+
+- `name` en un step es opcional; sirve para que el log sea legible. Si no lo
+  ponés, GitHub muestra el `uses` o el `run` tal cual.
+- `uses: actions/checkout@v4` trae tu código al runner. Sin este step la
+  carpeta de trabajo está vacía: no hay `package.json`, no hay nada.
+
+#### Pieza 4: instalar Node
+
+```yaml
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+```
+
+- `with` es cómo se le pasan parámetros a una action. Cada action documenta
+  los suyos en su README (los llama *inputs*).
+- `node-version-file: .nvmrc` le dice que lea la versión del archivo en vez
+  de escribirla a mano acá. Si mañana subís a Node 26, cambiás `.nvmrc` y el
+  CI te sigue sin tocar el YAML.
+
+#### Pieza 5: instalar dependencias
+
+```yaml
+      - name: Instalar dependencias
+        run: npm ci
+```
+
+- `run` ejecuta el comando en bash dentro del runner, parado en la raíz del
+  repo clonado.
+- `npm ci` (de *clean install*) instala exactamente lo que dice
+  `package-lock.json`, falla si el lock no coincide con `package.json`, y
+  borra `node_modules` antes de empezar. Es lo que querés en CI: lo mismo
+  siempre, sin sorpresas. `npm install` en cambio puede actualizar el lock.
+
+#### Pieza 6: correr el lint
+
+```yaml
+      - name: Lint
+        run: npm run lint
+```
+
+- Corre el script `lint` de tu `package.json`, que es `eslint`.
+- Si ESLint encuentra un error sale con código 1, el step falla, el job
+  falla, y el commit queda con la cruz roja. Ese es todo el mecanismo: cada
+  step que termina distinto de 0 frena el job.
+
+#### Cómo tiene que quedar
+
+Cuando pegues las seis piezas, el archivo tiene esta forma (sin los `...`):
+
+```
+name: CI
+on: ...
+jobs:
+  ci:
+    runs-on: ...
+    steps:
+      - ...   (checkout)
+      - ...   (setup-node)
+      - ...   (npm ci)
+      - ...   (lint)
+```
+
+Antes de hacer commit, validá que el YAML esté bien formado:
+
+```bash
+npx --yes yaml-lint .github/workflows/ci.yml
+```
+
+Si tira error, casi seguro es indentación. Documentación de referencia:
 - https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
-- https://github.com/actions/setup-node (fijate el input `node-version-file`)
+- https://github.com/actions/setup-node
 
 ### Paso 4: Push y mirar el run
 
@@ -167,8 +274,7 @@ comprobá que vuelve a verde.
 2. Cuando esté verde de nuevo, avisame. Voy a mirar tu `ci.yml` y los runs
    en GitHub y te comento.
 
-Si te trabás en algo, pedime una pista. Te doy la pieza que falta, no el
-archivo entero.
+Si algo no te cierra de alguna pieza, preguntame antes de seguir.
 
 ## Para pensar mientras esperás el run
 
