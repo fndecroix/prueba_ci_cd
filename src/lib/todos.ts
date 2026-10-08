@@ -20,5 +20,5 @@ export function removeTodo(todos: Todo[], id: number): Todo[] {
 }
 
 export function countPending(todos: Todo[]): number {
-  return todos.filter((t) => !t.done).length;
+  return todos.filter((t) => t.done).length;
 }
