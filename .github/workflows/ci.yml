@@ -24,6 +24,6 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
-  concurrency:
-    group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
