@@ -45,7 +45,55 @@ Por eso en este módulo dejamos:
 - `.nvmrc` con la versión de Node. CI va a leer este archivo para usar la
   misma versión que vos.
 - `package-lock.json` versionado. Garantiza que CI instale exactamente las
-  mismas versiones de dependencias que vos.
+  mismas versiones de dependencias que vos (cómo, en el módulo 1).
+
+### Qué es `.nvmrc` y cómo funciona
+
+Es un archivo de texto con una sola línea: la versión de Node del proyecto.
+En este repo dice `24`. No hace nada por sí mismo: no se ejecuta, no instala
+nada. Es una **nota** en un lugar con nombre conocido, para que los
+programas que la buscan la encuentren.
+
+Quién lo lee:
+
+- **`nvm`**, el gestor con el que instalaste Node. Puede tener varias
+  versiones instaladas y elegir cuál está activa en tu terminal. `nvm use 22`
+  activa la 22; `nvm use` sin número busca `.nvmrc` en la carpeta actual,
+  lee el número y activa esa versión. Probalo:
+  ```bash
+  nvm use        # "Found .nvmrc with version <24>  Now using node v24.x"
+  cd /tmp && nvm use   # "No .nvmrc file found"
+  ```
+- **`actions/setup-node`** en el CI (módulo 1). El runner no tiene `nvm`,
+  pero esa action entiende el mismo archivo si le pasás
+  `node-version-file: .nvmrc`: lo abre, lee el número e instala esa versión.
+  Es lo mismo que hace `nvm use`, hecho por otro programa en otra máquina.
+
+El problema que resuelve: vos tenés Node 24, un compañero tiene Node 20 de
+hace dos años, el runner instala lo que le digas. Con tres versiones
+distintas, el mismo código puede andar en una máquina y romperse en otra.
+Con `.nvmrc` la versión viaja con el código, en **un solo lugar**. La
+alternativa, escribir `node-version: 24` en el YAML, funciona igual pero
+duplica el dato; el día que actualizás uno y te olvidás del otro, local y
+CI corren Node distinto sin que nadie se entere.
+
+**Es una convención, no un control.** Si un dev nunca corre `nvm use`,
+sigue con su versión y nadie lo nota. Tres respuestas a eso, de más blanda
+a más dura:
+
+1. Automatizarlo: el README de nvm trae un hook de shell que corre
+   `nvm use` solo al entrar a una carpeta con `.nvmrc`. Herramientas más
+   nuevas como `fnm` o `volta` lo hacen de fábrica.
+2. Que el proyecto se niegue a correr con otra versión. En `package.json`
+   se declara `"engines": { "node": ">=24 <25" }`, y con un archivo
+   `.npmrc` en la raíz que diga `engine-strict=true`, `npm install` falla
+   con un error claro si la versión no cumple. Lo podés agregar cuando
+   quieras, en un PR aparte.
+3. El CI como red final: aunque un dev tenga Node 20 y le pase todo en su
+   máquina, el PR corre en el runner con la versión del `.nvmrc`. Si algo
+   depende de la versión, el check sale rojo. La idea de CI es justamente
+   que el lugar donde se decide si el código está bien no sea la máquina
+   de nadie.
 
 ## La app
 
