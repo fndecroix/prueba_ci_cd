@@ -123,6 +123,19 @@ coverage
 - `.git` y `tutorial` no sirven dentro de la imagen. `.env*`: nunca metas
   secretos en una imagen; cualquiera que la baje los puede leer.
 
+Además, asegurate de que la carpeta `public/` exista **en git**. Si está
+vacía, git no la versiona (no versiona carpetas, solo archivos), y en el
+runner el checkout no la crea: el `COPY --from=builder /app/public` del
+Dockerfile falla con un error confuso, `failed to compute cache key:
+"/app/public": not found`. En tu máquina anda porque la carpeta está en tu
+disco. La convención para versionar una carpeta vacía es un archivo
+`.gitkeep`:
+
+```bash
+touch public/.gitkeep
+git add public/.gitkeep
+```
+
 ### Paso 3: Dockerfile
 
 Creá `Dockerfile` (sin extensión) en la raíz, con las piezas en orden.
