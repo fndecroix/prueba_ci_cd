@@ -21,21 +21,76 @@ Casi la mitad es `npm ci` bajando de internet los mismos paquetes que bajó
 en el run anterior. El runner arranca limpio en cada run, así que no
 recuerda nada. La respuesta es el **cache**.
 
+### `cache: npm` es un parámetro de setup-node
+
+No es una feature de YAML ni de GitHub: es un **input** de
+`actions/setup-node`, igual que `node-version-file`. Por eso va dentro del
+`with:` de ese step. La action lo lee y hace esto por vos:
+
+1. Corre `npm config get cache` para saber dónde npm guarda sus descargas
+   (`~/.npm`).
+2. Calcula una clave con el sistema operativo, el gestor de paquetes y el
+   hash de `package-lock.json`.
+3. Le pide al servicio de cache de GitHub una entrada con esa clave. Si
+   existe, la descomprime en `~/.npm`. Es la línea "Cache restored" que vas
+   a ver en el log.
+4. Al final del job, si no había entrada, comprime `~/.npm` y la sube con
+   esa clave.
+
+Después `npm ci` corre normal; la action no lo toca. Encuentra `~/.npm`
+lleno y no baja nada. `cache: npm` acepta también `yarn` y `pnpm`: cambia
+qué comando corre en el paso 1 y qué archivo de lock mira en el 2.
+
 ### Qué se cachea y qué no
 
-`actions/setup-node` tiene un input `cache: npm` que guarda la carpeta de
-cache de npm (`~/.npm`, los tarballs ya descargados) entre runs. Clave del
-cache: el hash de `package-lock.json`. Si el lock no cambió, restaura la
-carpeta y `npm ci` se vuelve mucho más rápido porque no descarga nada; solo
-descomprime.
+Lo que hay en `~/.npm` es `_cacache`: una copia de cada tarball que npm
+bajó del registry, guardada por hash de contenido (el `integrity` que ves en
+cada entrada del lock). Tu lock tiene unas 500 entradas con `resolved`: sin
+cache son 500 requests al registry en cada run.
 
-Lo que **no** se cachea es `node_modules`. Eso es a propósito: `npm ci`
-borra `node_modules` al arrancar, así que cachearlo sería inútil, y además
-cachear `node_modules` entre versiones distintas de Node trae errores raros.
-Cacheás lo que es insumo (tarballs), no lo que es resultado (la instalación).
+```
+~/.npm/_cacache/
+  content-v2/sha512/00/..., 01/...   ← los .tgz comprimidos, por hash
+  index-v5/                          ← índice: URL del registry → hash
+```
 
-Límites: 10 GB por repo, y las entradas que no se usan en 7 días se borran.
-Para este proyecto sobra.
+`npm ci` siempre borra `node_modules` y lo arma de cero: lee el lock, y para
+cada paquete busca el tarball por `integrity`. Si está en `_cacache`, lo
+descomprime desde el disco; si no, lo baja y lo guarda para la próxima. Así
+que lo que se cachea es **lo que se descarga**, y el ahorro es la red.
+Descomprimir y armar el árbol se hace igual cada vez; por eso `npm ci` con
+cache es más rápido, no instantáneo.
+
+Lo que **no** se cachea es `node_modules`. No es que `cache: npm` "decida"
+eso: la action está escrita para cachear el directorio de npm y nada más.
+Y es la elección correcta: `node_modules` depende de la versión de Node y
+del sistema operativo (algunos paquetes compilan binarios al instalarse),
+mientras que los tarballs son los mismos en cualquier lado. Cacheás lo que
+es insumo, no lo que es resultado.
+
+### Abajo de todo está `actions/cache`
+
+`setup-node` es una comodidad. Lo que hace por dentro es usar la action
+genérica `actions/cache`, que podés usar vos para cachear cualquier carpeta
+con la clave que quieras. Escrito a mano sería:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ~/.npm
+    key: node-cache-Linux-npm-${{ hashFiles('package-lock.json') }}
+```
+
+Con esa pieza se cachea por ejemplo `.next/cache` para que el build de Next
+sea incremental, o los navegadores de Playwright (módulo 10). Otras actions
+de setup tienen atajos parecidos: `setup-python` tiene `cache: pip`,
+`setup-go` cachea solo.
+
+Límites y alcance: 10 GB por repo, y las entradas que no se usan en 7 días
+se borran. Un run en una rama ve las entradas de esa rama y las de `main`;
+`main` no ve las de otras ramas. Por eso el primer run en `main` después de
+mergear un lock nuevo puede bajar todo una vez más, y a partir de ahí queda
+donde todas las ramas lo ven.
 
 ### Un job o varios
 

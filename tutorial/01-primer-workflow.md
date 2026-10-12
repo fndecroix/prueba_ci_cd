@@ -53,12 +53,41 @@ Un step puede ser una de dos cosas:
   `node-version-file: .nvmrc` para leer la versión del archivo que dejamos
   en el módulo 0. Así hay una sola fuente de verdad para la versión de Node.
 
-### Por qué fijar la versión de una action
+### Una action es un repo de GitHub
 
-`actions/checkout@v4` apunta a la rama/tag `v4`, que el dueño puede mover.
-`actions/checkout@main` sería peor: cualquier cambio te rompe el pipeline.
-Lo más seguro es fijar el SHA del commit. Por ahora usá `@v4`; en el módulo
-10 vemos cómo Dependabot te mantiene esto al día.
+`actions/checkout` no es un comando ni algo interno de GitHub: es literalmente
+el repo https://github.com/actions/checkout. Cuando el runner llega a un
+step con `uses`, clona ese repo y ejecuta lo que dice su `action.yml` de la
+raíz. Cualquiera puede publicar una action; `actions/*` son las que mantiene
+GitHub, `docker/*` las de Docker, y así.
+
+### Qué es el `@v4`
+
+Lo que va después del `@` es una **referencia de git** en ese repo: un tag,
+una rama o un SHA de commit. Es la versión de la action, no de GitHub
+Actions, ni de Node, ni de nada tuyo. Cada repo de action tiene su propia
+numeración: que `checkout` esté en `v4` y `setup-node` también es
+coincidencia, y `docker/build-push-action@v6` no tiene relación con ninguno.
+
+`v4` es un tag que el dueño va **moviendo** al último release de la serie 4
+(hoy apunta al mismo commit que `v4.2.2`; cuando saquen `v4.2.3`, lo mueven).
+Las tres formas de referenciar, de menos a más estricta:
+
+```yaml
+uses: actions/checkout@main    # rama: cambia con cada commit, nunca en CI
+uses: actions/checkout@v4      # tag mayor: recibe fixes, no cambios incompatibles
+uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # SHA: inmutable
+```
+
+Con `@v4` confiás en que el dueño respeta la promesa de "mismo mayor, misma
+interfaz". Con el SHA no confiás en nadie, pero tenés que actualizarlo a
+mano. Por ahora usá `@v4`; en el módulo 10 Dependabot hace ese trabajo. Si
+querés verlo: en el repo de `actions/checkout`, pestaña **Tags**, cada tag
+es un commit.
+
+Los parámetros que una action acepta (`with:`) también los define ese repo,
+en el `action.yml`, bajo `inputs`. Por eso `node-version-file` existe en
+`setup-node` y no en `checkout`.
 
 ### Qué pasa cuando corre
 
@@ -187,7 +216,32 @@ jobs:
 - `npm ci` (de *clean install*) instala exactamente lo que dice
   `package-lock.json`, falla si el lock no coincide con `package.json`, y
   borra `node_modules` antes de empezar. Es lo que querés en CI: lo mismo
-  siempre, sin sorpresas. `npm install` en cambio puede actualizar el lock.
+  siempre, sin sorpresas.
+
+#### `npm ci` vs `npm install`
+
+| | `npm install` | `npm ci` |
+|---|---|---|
+| Fuente de verdad | `package.json`; el lock es una sugerencia | `package-lock.json`, exacto |
+| Si lock y package.json no coinciden | resuelve de nuevo y reescribe el lock | falla con error |
+| Si no hay lock | lo crea | falla |
+| `node_modules` previo | lo actualiza in-place | lo borra y arma de cero |
+| Para qué sirve | agregar o actualizar deps en tu máquina | CI, Docker, cualquier lugar donde querés lo mismo siempre |
+
+El punto es que `npm install` resuelve **rangos**. Si `package.json` dice
+`^5.0.3` y salió `5.1.0`, un `npm install` en un runner limpio puede
+terminar con `5.1.0` y un lock distinto al que commiteaste. Dos runs del
+mismo commit podrían instalar cosas distintas, y un build que pasa hoy puede
+fallar mañana sin que nadie haya tocado nada. `npm ci` instala la versión
+que dice el lock, y punto: el mismo commit da siempre el mismo
+`node_modules`.
+
+El costo es que si cambiás `package.json` a mano y no corrés `npm install`
+local para actualizar el lock, el CI falla con error. Eso es una feature:
+te avisa que el lock quedó viejo.
+
+Regla práctica: `npm install` en tu máquina cuando cambiás dependencias, y
+commiteás el lock. `npm ci` en todos lados donde el código corre sin vos.
 
 #### Pieza 6: correr el lint
 
@@ -304,7 +358,7 @@ Si algo no te cierra de alguna pieza, preguntame antes de seguir.
 
 ## Para pensar mientras esperás el run
 
-- ¿Por qué `npm ci` y no `npm install`? Pista: mirá qué hace cada uno con
-  `package-lock.json`.
+- Si borrás `package-lock.json` del repo y dejás `npm ci` en el workflow,
+  ¿qué pasa? ¿Y si lo cambiás por `npm install`? ¿Qué perdés en cada caso?
 - Si el lint pasa en CI pero vos no lo corriste localmente, ¿el código está
   bien? ¿Qué cubre el lint y qué no?
