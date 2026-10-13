@@ -363,12 +363,34 @@ inmutables: volver atrás no es un deploy, es cambiar un puntero.
 
 ### Paso 8: Romperlo a propósito
 
-En una rama nueva, hacé que `/api/health` explote en runtime: en
-`src/app/api/health/route.ts`, agregá como primera línea de `GET`:
+En una rama nueva, hacé que `/api/health` explote **solo en runtime**.
+Reemplazá la función `GET` de `src/app/api/health/route.ts` por:
 
 ```ts
-  throw new Error("boom");
+export function GET(request: Request) {
+  if (request.headers.get("host")) {
+    throw new Error("boom");
+  }
+  return NextResponse.json({
+    status: "ok",
+    version: process.env.APP_VERSION ?? "dev",
+    timestamp: new Date().toISOString(),
+  });
+}
 ```
+
+Toda request HTTP trae el header `host`, así que en runtime esto tira
+siempre. El `if` no es decorativo, y vale la pena entender por qué:
+
+- Si ponés `throw new Error("boom")` suelto como primera línea, **el build
+  falla**, no el deploy. `next build` ejecuta cada route handler una vez
+  durante el build para decidir si puede dejarlo pre-renderizado, y una
+  excepción ahí corta el build con `Error occurred prerendering page
+  "/api/health"`. Es el job `build` el que se pone rojo, el deploy nunca
+  corre, y no aprendiste nada sobre smoke tests.
+- Al leer `request.headers`, Next sabe que la respuesta depende de la
+  request, abandona el pre-render en esa línea y deja la ruta para
+  runtime. El `throw` recién se ejecuta cuando llega una request de verdad.
 
 Commit, push, PR. Lint pasa, typecheck pasa, tests pasan (nadie testea ese
 endpoint), build pasa, el deploy a Vercel **termina bien**, y el smoke test

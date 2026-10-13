@@ -418,13 +418,15 @@ La versión tiene que ser la vieja. En la pestaña Actions, el workflow
 
 ### Paso 7: Romperlo a propósito
 
-En una rama, el mismo `throw new Error("boom")` del módulo 6 en
-`/api/health`. PR, y esta vez **mergealo**: vas a ver qué pasa en
-producción cuando llega código roto.
+En una rama, el mismo `GET` con `if (request.headers.get("host"))` y
+`throw` del paso 8 del módulo 6 en `/api/health` (el `throw` suelto no
+sirve: rompe el build, no el deploy). PR, y esta vez **mergealo**: vas a
+ver qué pasa en producción cuando llega código roto.
 
-El run de `main`: `docker` publica la imagen (el build no se entera), y
-`deploy` falla en `docker compose up -d --wait` porque el healthcheck nunca
-pasa. El job queda rojo. Pero fijate qué quedó en el servidor:
+El run de `main`: el build pasa porque la excepción es de runtime, `docker`
+publica la imagen, y `deploy` falla en `docker compose up -d --wait` porque
+el healthcheck nunca pasa. El job queda rojo. Pero fijate qué quedó en el
+servidor:
 
 ```bash
 curl http://TU_IP/api/health
